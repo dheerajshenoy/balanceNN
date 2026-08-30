@@ -1,36 +1,51 @@
 #pragma once
 
-// Filled UV-sphere rendered with a Phong shader. Owns a VAO/VBO/EBO and a
-// GLSL program; construct after a GL context is current, destroy before it
-// goes away.
-class SphereRenderer
+// Simple Phong-lit scene: a filled sphere sitting on a rectangular plate.
+// Owns one GLSL program and two meshes. Construct after a GL context is
+// current, destroy before it goes away.
+class SceneRenderer
 {
 public:
-    SphereRenderer() = default;
-    ~SphereRenderer();
+    SceneRenderer() = default;
+    ~SceneRenderer();
 
-    SphereRenderer(const SphereRenderer &)            = delete;
-    SphereRenderer &operator=(const SphereRenderer &) = delete;
+    SceneRenderer(const SceneRenderer &)            = delete;
+    SceneRenderer &operator=(const SceneRenderer &) = delete;
 
-    // Build the mesh and compile the shader. Returns false on shader error.
     bool init(int stacks = 32, int slices = 48);
 
-    // aspect = width / height. Draws one sphere at the origin, rotated by
-    // yaw (Y axis) and pitch (X axis) radians.
+    // aspect = width / height. Rotates the whole scene by yaw (Y) and
+    // pitch (X) so the sphere and plate turn together.
     void draw(float aspect, float yaw, float pitch);
 
-private:
-    unsigned int m_vao     = 0;
-    unsigned int m_vbo     = 0;
-    unsigned int m_ebo     = 0;
-    unsigned int m_program = 0;
-    int m_indexCount       = 0;
+public:
+    struct Mesh
+    {
+        unsigned int vao = 0;
+        unsigned int vbo = 0;
+        unsigned int ebo = 0;
+        int indexCount   = 0;
+    };
 
-    // Cached uniform locations.
-    int m_uModel = -1;
-    int m_uView  = -1;
-    int m_uProj  = -1;
-    int m_uLight = -1;
-    int m_uColor = -1;
-    int m_uCam   = -1;
+private:
+    void buildSphere(Mesh &m, int stacks, int slices);
+    void buildPlate(Mesh &m, float w, float h, float d);
+    void destroyMesh(Mesh &m);
+
+    void drawMesh(const Mesh &m, const float model[16], float r, float g,
+                  float b);
+
+    Mesh m_sphere;
+    Mesh m_plate;
+
+    unsigned int m_program = 0;
+    int m_uModel           = -1;
+    int m_uView            = -1;
+    int m_uProj            = -1;
+    int m_uLight           = -1;
+    int m_uColor           = -1;
+    int m_uCam             = -1;
 };
+
+// Kept for source compatibility.
+using SphereRenderer = SceneRenderer;
