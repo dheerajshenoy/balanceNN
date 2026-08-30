@@ -1,10 +1,6 @@
 #include "nn.hpp"
 
-NN::NN() {}
-
-NN::~NN() {}
-
-void
-NN::train()
+NN::NN()
 {
+    torch::Tensor tensor = torch::rand({2, 3});
 }

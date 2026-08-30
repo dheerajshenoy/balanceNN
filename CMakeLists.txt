@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(BalanceNN LANGUAGES CXX)
+project(BalanceNN LANGUAGES C CXX)
 
 # Use timestamps from extraction (not the archive) so URL changes trigger rebuilds.
 if(POLICY CMP0135)
@@ -54,6 +54,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SDL3)
 
+# --- glad (OpenGL loader) ---
+FetchContent_Declare(
+    glad
+    GIT_REPOSITORY https://github.com/Dav1dde/glad.git
+    GIT_TAG        v2.0.6
+    SOURCE_SUBDIR  cmake
+)
+FetchContent_MakeAvailable(glad)
+glad_add_library(glad_gl_core_33 STATIC REPRODUCIBLE API gl:core=3.3)
+
 # --- Include directories ---
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
@@ -64,9 +74,12 @@ include_directories(
 add_executable(${PROJECT_NAME}
     src/main.cpp
     src/BalanceNN.cpp
+    src/nn.cpp
+    src/sphere_renderer.cpp
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE ${TORCH_LIBRARIES} SDL3::SDL3)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${TORCH_LIBRARIES} SDL3::SDL3 glad_gl_core_33)
 target_compile_options(${PROJECT_NAME} PRIVATE ${TORCH_CXX_FLAGS})
+target_precompile_headers(${PROJECT_NAME} PRIVATE include/pch.hpp)
 
 # --- Tests ---
 # enable_testing()

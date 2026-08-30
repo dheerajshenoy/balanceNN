@@ -1,5 +1,9 @@
 #include "BalanceNN.hpp"
 
+#include <glad/gl.h>
+
+#include <cstdio>
+
 BalanceNN::BalanceNN()
 {
     init();
@@ -7,8 +11,8 @@ BalanceNN::BalanceNN()
 
 BalanceNN::~BalanceNN()
 {
-    SDL_DestroyTexture(m_texture);
-    SDL_DestroyRenderer(m_renderer);
+    if (m_glCtx)
+        SDL_GL_DestroyContext(m_glCtx);
     SDL_DestroyWindow(m_window);
     SDL_Quit();
 }
@@ -19,8 +23,9 @@ BalanceNN::init()
     initGUI();
     initNN();
 
-    m_cube      = makeCube(2.0f);
-    m_sphere    = makeSphere(1.2f, 14, 20);
+    if (!m_sphere.init())
+        std::fprintf(stderr, "SphereRenderer init failed\n");
+
     m_lastTicks = SDL_GetTicks();
 }
 
@@ -28,9 +33,28 @@ void
 BalanceNN::initGUI()
 {
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_CreateWindowAndRenderer("BalanceNN", m_width, m_height,
-                                SDL_WINDOW_RESIZABLE, &m_window, &m_renderer);
-    SDL_SetRenderVSync(m_renderer, 1);
+
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
+                        SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+
+    m_window = SDL_CreateWindow("BalanceNN", m_width, m_height,
+                                SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    m_glCtx = SDL_GL_CreateContext(m_window);
+    SDL_GL_MakeCurrent(m_window, m_glCtx);
+    SDL_GL_SetSwapInterval(1);
+
+    int version = gladLoadGL(reinterpret_cast<GLADloadfunc>(
+        SDL_GL_GetProcAddress));
+    if (version == 0)
+        std::fprintf(stderr, "Failed to load OpenGL\n");
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
 }
 
 void
@@ -39,7 +63,7 @@ BalanceNN::update()
     Uint64 now  = SDL_GetTicks();
     float dt    = (now - m_lastTicks) / 1000.0f;
     m_lastTicks = now;
-    m_angle += dt * 0.8f;
+    m_yaw += dt * 0.8f;
 
     SDL_GetWindowSize(m_window, &m_width, &m_height);
 }
@@ -47,30 +71,15 @@ BalanceNN::update()
 void
 BalanceNN::render()
 {
-    SDL_SetRenderDrawColor(m_renderer, 15, 18, 24, 255);
-    SDL_RenderClear(m_renderer);
+    glViewport(0, 0, m_width, m_height);
+    glClearColor(0.06f, 0.07f, 0.09f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    float cy    = m_height * 0.5f;
-    float focal = m_height * 0.9f; // ~60 deg vertical fov
-    float camZ  = 6.0f;
+    float aspect = static_cast<float>(m_width) /
+                   static_cast<float>(m_height > 0 ? m_height : 1);
+    m_sphere.draw(aspect, m_yaw, m_pitch);
 
-    SDL_SetRenderDrawColor(m_renderer, 100, 200, 255, 255);
-    drawWireframe(m_renderer, m_cube, {0, 0, 0},
-                  /*rotX*/ 0.5f, /*rotY*/ m_angle, m_width * 0.30f, cy, focal,
-                  camZ);
-
-    SDL_SetRenderDrawColor(m_renderer, 255, 180, 120, 255);
-    drawWireframe(m_renderer, m_sphere, {0, 0, 0},
-                  /*rotX*/ 0.3f, /*rotY*/ m_angle * 1.3f, m_width * 0.70f, cy,
-                  focal, camZ);
-
-    SDL_RenderPresent(m_renderer);
-}
-
-void
-BalanceNN::initNN()
-{
-    // Initialize neural network components here
+    SDL_GL_SwapWindow(m_window);
 }
 
 void
@@ -97,4 +106,9 @@ BalanceNN::handleEvents(SDL_Event &event)
                  && event.key.key == SDLK_ESCAPE)
             m_running = false;
     }
+}
+
+void
+BalanceNN::initNN()
+{
 }

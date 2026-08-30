@@ -1,14 +1,11 @@
 #pragma once
 
-#include <vector>
+#include <torch/torch.h>
 
 class NN
 {
-
 public:
     NN();
-    ~NN();
-    void train();
 
 private:
 };
