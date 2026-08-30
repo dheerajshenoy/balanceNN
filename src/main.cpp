@@ -4,4 +4,5 @@ int
 main()
 {
     BalanceNN balanceNN;
+    balanceNN.run();
 }

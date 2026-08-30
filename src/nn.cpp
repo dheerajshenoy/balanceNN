@@ -1,12 +1,10 @@
-#include "nnpp.hpp"
+#include "nn.hpp"
 
-//------------------ Neuron Implementation --------------------
+NN::NN() {}
 
-Neuron::Neuron() {}
-
-Neuron::~Neuron() {}
+NN::~NN() {}
 
 void
-Neuron::activate()
+NN::train()
 {
 }
