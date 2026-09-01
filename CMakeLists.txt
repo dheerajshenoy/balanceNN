@@ -75,14 +75,21 @@ add_executable(${PROJECT_NAME}
     src/main.cpp
     src/BalanceNN.cpp
     src/nn.cpp
-    src/sphere_renderer.cpp
+    src/render_common.cpp
+    src/plate.cpp
+    src/sphere.cpp
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${TORCH_LIBRARIES} SDL3::SDL3 glad_gl_core_33)
 target_compile_options(${PROJECT_NAME} PRIVATE ${TORCH_CXX_FLAGS})
 target_precompile_headers(${PROJECT_NAME} PRIVATE include/pch.hpp)
 
 # --- Tests ---
-# enable_testing()
+enable_testing()
+
+# Standalone physics smoke test — no GL, no SDL, no torch.
+add_executable(test_physics src/test_physics.cpp)
+add_test(NAME physics COMMAND test_physics)
+
 # add_executable(test_matrix src/test_matrix.cpp)
 # target_link_libraries(test_matrix PRIVATE ${TORCH_LIBRARIES})
 # target_compile_options(test_matrix PRIVATE ${TORCH_CXX_FLAGS})
