@@ -65,8 +65,9 @@ Plate::tiltMatrix() const
 }
 
 void
-Plate::draw(const PhongProgram &prog, const Mat4 &parent) const
+Plate::draw(const PhongProgram &prog, const Mat4 &parent, float r, float g,
+            float b) const
 {
     Mat4 model = mul(parent, tiltMatrix());
-    prog.drawMesh(m_mesh, model, 0.35f, 0.4f, 0.5f);
+    prog.drawMesh(m_mesh, model, r, g, b);
 }

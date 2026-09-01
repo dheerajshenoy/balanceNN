@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <glad/gl.h>
 #include <numbers>
+#include <random>
 
 namespace
 {
@@ -12,6 +13,21 @@ constexpr float kActionReturn = 6.0f; // decay toward 0 when key released
 constexpr float kZoomRate     = 4.0f; // world units/s
 constexpr float kMinCamDist   = 1.5f;
 constexpr float kMaxCamDist   = 30.0f;
+constexpr float kTargetInterval = 5.0f; // seconds before target re-rolls
+constexpr float kTargetMargin   = 0.4f; // keep target away from plate edge
+
+// Draw a random target position inside the plate, at least `margin` from
+// each edge. Seed is state kept by the caller.
+void
+randomizeTarget(unsigned &seed, float halfW, float halfD, float margin,
+                float &tx, float &tz)
+{
+    std::mt19937 rng(seed++);
+    std::uniform_real_distribution<float> ux(-halfW + margin, halfW - margin);
+    std::uniform_real_distribution<float> uz(-halfD + margin, halfD - margin);
+    tx = ux(rng);
+    tz = uz(rng);
+}
 } // namespace
 
 BalanceNN::BalanceNN(std::string policy_path)
@@ -23,6 +39,7 @@ BalanceNN::BalanceNN(std::string policy_path)
 BalanceNN::~BalanceNN()
 {
     delete m_sphere;
+    delete m_targetMarker;
     delete m_plate;
     if (m_glCtx)
         SDL_GL_DestroyContext(m_glCtx);
@@ -47,6 +64,8 @@ BalanceNN::init()
 
     m_plate  = new Plate(cfg.plateWidth, 0.2f, cfg.plateDepth);
     m_sphere = new Sphere(cfg.plateWidth * 0.05f);
+    // Flat marker: same class, tiny thin XZ footprint.
+    m_targetMarker = new Plate(0.3f, 0.02f, 0.3f);
 
     if (!m_policyPath.empty())
     {
@@ -60,7 +79,9 @@ BalanceNN::init()
                              "run with un-normalized inputs\n",
                              m_policyPath.c_str());
             m_actor = a;
-            std::printf("loaded policy from %s.{actor,norm}\n",
+            m_mode  = Mode::Neural;
+            std::printf("loaded policy from %s.{actor,norm}; starting in "
+                        "Neural mode (press K for manual, P for PD)\n",
                         m_policyPath.c_str());
         }
         catch (const std::exception &e)
@@ -149,6 +170,27 @@ BalanceNN::update()
     m_camDist = std::clamp(m_camDist + dZoom * kZoomRate * dt, kMinCamDist,
                            kMaxCamDist);
 
+    // Target-mode housekeeping: countdown timer, or immediately re-roll if
+    // the ball is within the "reached" radius of the current target.
+    if (m_targetMode)
+    {
+        m_targetTimer -= dt;
+        const Observation &o = m_env.observe();
+        float dx = o.px - m_targetX;
+        float dz = o.pz - m_targetZ;
+        bool reached = (dx * dx + dz * dz) < m_targetHitDist * m_targetHitDist;
+        if (m_targetTimer <= 0.0f || reached)
+        {
+            randomizeTarget(m_targetSeed, m_plate->halfWidth(),
+                            m_plate->halfDepth(), kTargetMargin, m_targetX,
+                            m_targetZ);
+            m_targetTimer = kTargetInterval;
+            if (reached)
+                std::printf("target reached; new target = (%+.2f, %+.2f)\n",
+                            m_targetX, m_targetZ);
+        }
+    }
+
     // Step the env at its fixed dt, catching up whatever the render frame took.
     m_physicsAcc += dt;
     float envDt = m_env.config().dt;
@@ -156,6 +198,17 @@ BalanceNN::update()
     {
         if (m_env.done())
             m_env.reset(SDL_GetTicks());
+
+        // If target mode is on, transform the observation so the target
+        // looks like the origin to the controller (which was trained/tuned
+        // to reach the origin). Velocity, tilt are untouched.
+        Observation ctrl_obs = m_env.observe();
+        if (m_targetMode)
+        {
+            ctrl_obs.px -= m_targetX;
+            ctrl_obs.pz -= m_targetZ;
+        }
+
         float ax = 0.0f, az = 0.0f;
         switch (m_mode)
         {
@@ -165,7 +218,7 @@ BalanceNN::update()
             break;
         case Mode::PD:
         {
-            auto a = m_pd.compute(m_env.observe());
+            auto a = m_pd.compute(ctrl_obs);
             ax     = a.x;
             az     = a.z;
             break;
@@ -173,12 +226,10 @@ BalanceNN::update()
         case Mode::Neural:
             if (m_actor)
             {
-                // Pack obs, normalize, run actor deterministically (mean).
                 float raw[6];
-                const Observation &o = m_env.observe();
-                raw[0] = o.px;   raw[1] = o.pz;
-                raw[2] = o.vx;   raw[3] = o.vz;
-                raw[4] = o.tiltX; raw[5] = o.tiltZ;
+                raw[0] = ctrl_obs.px;   raw[1] = ctrl_obs.pz;
+                raw[2] = ctrl_obs.vx;   raw[3] = ctrl_obs.vz;
+                raw[4] = ctrl_obs.tiltX; raw[5] = ctrl_obs.tiltZ;
                 m_norm.normalize(raw);
                 torch::NoGradGuard nograd;
                 auto obs_t = torch::from_blob(raw, {1, 6},
@@ -228,6 +279,21 @@ BalanceNN::render()
     Mat4 plateFrame = mul(sceneRot, m_plate->tiltMatrix());
     m_sphere->draw(m_program, plateFrame, m_plate->topY());
 
+    if (m_targetMode)
+    {
+        // Marker sits on top of the plate. Its own tilt is 0 (it doesn't
+        // need to tilt independently of the parent), and we place it in
+        // plate-local space via translation, then let the plateFrame
+        // parent bring it into world.
+        Mat4 markerLocal = translation(m_targetX,
+                                       m_plate->topY()
+                                           + m_targetMarker->height() * 0.5f,
+                                       m_targetZ);
+        Mat4 markerFrame = mul(plateFrame, markerLocal);
+        m_targetMarker->draw(m_program, markerFrame, /*r*/ 1.0f, /*g*/ 0.85f,
+                             /*b*/ 0.15f);
+    }
+
     SDL_GL_SwapWindow(m_window);
 }
 
@@ -255,12 +321,20 @@ BalanceNN::handleEvents(SDL_Event &event)
         {
             if (event.key.key == SDLK_ESCAPE)
                 m_running = false;
+            // Mode selection: K = manual (keyboard), P = PD, N = neural.
+            // Each key SETS the mode (not toggles) so switching is
+            // unambiguous even after mode changes from elsewhere.
+            else if (event.key.key == SDLK_K)
+            {
+                m_mode    = Mode::Keyboard;
+                m_actionX = m_actionZ = 0.0f;
+                std::printf("mode: keyboard\n");
+            }
             else if (event.key.key == SDLK_P)
             {
-                m_mode = (m_mode == Mode::PD) ? Mode::Keyboard : Mode::PD;
+                m_mode    = Mode::PD;
                 m_actionX = m_actionZ = 0.0f;
-                std::printf("mode: %s\n",
-                            m_mode == Mode::PD ? "PD" : "keyboard");
+                std::printf("mode: PD\n");
             }
             else if (event.key.key == SDLK_N)
             {
@@ -268,16 +342,30 @@ BalanceNN::handleEvents(SDL_Event &event)
                     std::printf("no policy loaded (pass --policy <path>)\n");
                 else
                 {
-                    m_mode = (m_mode == Mode::Neural) ? Mode::Keyboard
-                                                       : Mode::Neural;
+                    m_mode    = Mode::Neural;
                     m_actionX = m_actionZ = 0.0f;
-                    std::printf("mode: %s\n", m_mode == Mode::Neural
-                                                  ? "neural"
-                                                  : "keyboard");
+                    std::printf("mode: neural\n");
                 }
             }
             else if (event.key.key == SDLK_R)
                 m_env.reset(SDL_GetTicks());
+            else if (event.key.key == SDLK_T)
+            {
+                m_targetMode = !m_targetMode;
+                if (m_targetMode)
+                {
+                    randomizeTarget(m_targetSeed, m_plate->halfWidth(),
+                                    m_plate->halfDepth(), kTargetMargin,
+                                    m_targetX, m_targetZ);
+                    m_targetTimer = kTargetInterval;
+                    std::printf("target mode: ON  target=(%+.2f, %+.2f)\n",
+                                m_targetX, m_targetZ);
+                }
+                else
+                {
+                    std::printf("target mode: OFF\n");
+                }
+            }
         }
     }
 }

@@ -33,7 +33,10 @@ public:
     Mat4 tiltMatrix() const;
 
     // Draw with `parent` prepended (e.g., camera-orbit scene rotation).
-    void draw(const PhongProgram &prog, const Mat4 &parent) const;
+    // Default color matches the plate; override for markers that share the
+    // Plate mesh shape but need to stand out.
+    void draw(const PhongProgram &prog, const Mat4 &parent,
+              float r = 0.35f, float g = 0.4f, float b = 0.5f) const;
 
 private:
     float m_width, m_height, m_depth;

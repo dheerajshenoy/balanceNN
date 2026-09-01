@@ -50,8 +50,20 @@ private:
     int m_height = 1080;
 
     PhongProgram m_program;
-    Plate *m_plate   = nullptr;
-    Sphere *m_sphere = nullptr;
+    Plate *m_plate        = nullptr;
+    Plate *m_targetMarker = nullptr; // small flat plate as the goal marker
+    Sphere *m_sphere      = nullptr;
+
+    // Target mode: a random point on the plate that the controller tries
+    // to reach. Toggled with T. When on, observation position is fed to
+    // controllers as (obs.px - target.x, obs.pz - target.z) so the same
+    // trained "go to origin" policy chases the target without retraining.
+    bool m_targetMode      = false;
+    float m_targetX        = 0.0f;
+    float m_targetZ        = 0.0f;
+    float m_targetTimer    = 0.0f;   // seconds until next randomization
+    float m_targetHitDist  = 0.15f;  // ball within this = "reached"
+    unsigned m_targetSeed  = 1;      // for reproducibility across runs
 
     // Env owns physics + tilt; renderer is a pure observer.
     BallPlateEnv m_env;
