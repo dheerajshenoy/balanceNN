@@ -9,6 +9,7 @@ extern "C"
 
 #include "env.hpp"
 #include "nn.hpp"
+#include "pd_controller.hpp"
 #include "plate.hpp"
 #include "render_common.hpp"
 #include "sphere.hpp"
@@ -41,6 +42,9 @@ private:
 
     // Env owns physics + tilt; renderer is a pure observer.
     BallPlateEnv m_env;
+
+    PDController m_pd;
+    bool m_autopilot = false;
 
     // Smoothed keyboard action (before clipping to [-1, 1]) so the tilt
     // doesn't snap on key press/release.

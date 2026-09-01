@@ -133,7 +133,19 @@ BalanceNN::update()
     {
         if (m_env.done())
             m_env.reset(SDL_GetTicks());
-        m_env.step(m_actionX, m_actionZ);
+        float ax, az;
+        if (m_autopilot)
+        {
+            auto a = m_pd.compute(m_env.observe());
+            ax     = a.x;
+            az     = a.z;
+        }
+        else
+        {
+            ax = m_actionX;
+            az = m_actionZ;
+        }
+        m_env.step(ax, az);
         m_physicsAcc -= envDt;
     }
 
@@ -193,9 +205,19 @@ BalanceNN::handleEvents(SDL_Event &event)
     {
         if (event.type == SDL_EVENT_QUIT)
             m_running = false;
-        else if (event.type == SDL_EVENT_KEY_DOWN
-                 && event.key.key == SDLK_ESCAPE)
-            m_running = false;
+        else if (event.type == SDL_EVENT_KEY_DOWN)
+        {
+            if (event.key.key == SDLK_ESCAPE)
+                m_running = false;
+            else if (event.key.key == SDLK_P)
+            {
+                m_autopilot = !m_autopilot;
+                m_actionX = m_actionZ = 0.0f;
+                std::printf("autopilot: %s\n", m_autopilot ? "ON" : "OFF");
+            }
+            else if (event.key.key == SDLK_R)
+                m_env.reset(SDL_GetTicks());
+        }
     }
 }
 
