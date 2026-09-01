@@ -5,28 +5,49 @@
 
 namespace
 {
-constexpr float kGravity = 9.81f;
-constexpr float kDamping = 0.5f; // linear per-second drag
+constexpr float kGravity  = 9.81f;
+constexpr float kMuK      = 0.05f; // rolling-friction coefficient
+constexpr float kDamping  = 0.0f;  // extra viscous drag (usually 0)
 } // namespace
 
 BallState
-stepBallPhysics(BallState s, float tiltX, float tiltZ, float dt, float damping,
-                float gravity)
+stepBallPhysics(BallState s, float tiltX, float tiltZ, float dt, float muK,
+                float damping, float gravity)
 {
-    // ax comes from tilt about Z (rotates the plate's X-axis out of level);
-    // ay comes from tilt about X (rotates the plate's Z-axis out of level).
-    // Vec2 y-component holds plate-local Z.
+    // ax comes from tilt about Z; ay from tilt about X (Vec2::y is plate-Z).
     float ax = gravity * std::sin(tiltZ);
     float ay = gravity * std::sin(tiltX);
 
     s.vel.x += ax * dt;
     s.vel.y += ay * dt;
 
-    float d = 1.0f - damping * dt;
-    if (d < 0.0f)
-        d = 0.0f;
-    s.vel.x *= d;
-    s.vel.y *= d;
+    // Kinetic friction: constant decel of muK*g opposite to velocity, clamped
+    // so we don't reverse the direction — the ball actually stops.
+    float speed = std::sqrt(s.vel.x * s.vel.x + s.vel.y * s.vel.y);
+    if (speed > 0.0f)
+    {
+        float dv = muK * gravity * dt;
+        if (dv >= speed)
+        {
+            s.vel.x = 0.0f;
+            s.vel.y = 0.0f;
+        }
+        else
+        {
+            float k = (speed - dv) / speed;
+            s.vel.x *= k;
+            s.vel.y *= k;
+        }
+    }
+
+    if (damping > 0.0f)
+    {
+        float d = 1.0f - damping * dt;
+        if (d < 0.0f)
+            d = 0.0f;
+        s.vel.x *= d;
+        s.vel.y *= d;
+    }
 
     s.pos.x += s.vel.x * dt;
     s.pos.y += s.vel.y * dt;
@@ -92,7 +113,8 @@ Sphere::update(float dt, const Plate &plate)
         return;
 
     BallState next = stepBallPhysics({m_position, m_velocity}, plate.tiltX(),
-                                     plate.tiltZ(), dt, kDamping, kGravity);
+                                     plate.tiltZ(), dt, kMuK, kDamping,
+                                     kGravity);
     m_acceleration.x = (next.vel.x - m_velocity.x) / (dt > 0.0f ? dt : 1.0f);
     m_acceleration.y = (next.vel.y - m_velocity.y) / (dt > 0.0f ? dt : 1.0f);
     m_position       = next.pos;

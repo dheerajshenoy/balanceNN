@@ -15,11 +15,16 @@ struct BallState
     Vec2 vel;
 };
 
-// Standalone ball-on-plate integrator (semi-implicit Euler + linear damping).
-// tiltX / tiltZ are plate rotations about world X / Z (radians).
-// The returned state is `s` advanced by one dt. Does no boundary handling.
+// Standalone ball-on-plate integrator (semi-implicit Euler).
+// Applies gravity projected onto the tilted surface, then kinetic friction
+// (Coulomb: constant decel of muK*gravity opposite to velocity, clamped so
+// the ball actually STOPS instead of asymptotically decaying), then
+// optional linear viscous damping. tiltX / tiltZ are plate rotations about
+// world X / Z (radians). The returned state is `s` advanced by one dt.
+// Does no boundary handling.
 BallState stepBallPhysics(BallState s, float tiltX, float tiltZ, float dt,
-                          float damping = 0.5f, float gravity = 9.81f);
+                          float muK = 0.3f, float damping = 0.0f,
+                          float gravity = 9.81f);
 
 // A sphere that rolls on a tilted plate. State (position, velocity,
 // acceleration) is in the plate's local XZ (Vec2::x → plate X,
