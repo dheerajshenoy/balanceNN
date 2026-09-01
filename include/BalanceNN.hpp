@@ -7,6 +7,7 @@ extern "C"
 #include <SDL3/SDL.h>
 }
 
+#include "env.hpp"
 #include "nn.hpp"
 #include "plate.hpp"
 #include "render_common.hpp"
@@ -38,16 +39,23 @@ private:
     Plate *m_plate   = nullptr;
     Sphere *m_sphere = nullptr;
 
+    // Env owns physics + tilt; renderer is a pure observer.
+    BallPlateEnv m_env;
+
+    // Smoothed keyboard action (before clipping to [-1, 1]) so the tilt
+    // doesn't snap on key press/release.
+    float m_actionX = 0.0f;
+    float m_actionZ = 0.0f;
+
     // Camera orbit.
     float m_yaw   = 0.0f;
     float m_pitch = 0.4f;
 
-    // Plate tilt (radians) driven by keys A/D (Z-tilt) and W/S (X-tilt).
-    float m_tiltX = 0.0f;
-    float m_tiltZ = 0.0f;
-
     // Camera distance from scene origin (+/- keys zoom).
     float m_camDist = 5.0f;
+
+    // Accumulator to run env.step() at a fixed dt regardless of frame rate.
+    float m_physicsAcc = 0.0f;
 
     Uint64 m_lastTicks = 0;
     bool m_running     = true;

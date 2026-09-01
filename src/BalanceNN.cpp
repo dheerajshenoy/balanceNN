@@ -7,12 +7,11 @@
 
 namespace
 {
-constexpr float kTiltRate   = 1.2f; // rad/s
-constexpr float kMaxTilt    = 0.6f; // rad
-constexpr float kTiltReturn = 3.0f; // rad/s toward level when key released
-constexpr float kZoomRate   = 4.0f; // world units/s
-constexpr float kMinCamDist = 1.5f;
-constexpr float kMaxCamDist = 30.0f;
+constexpr float kActionRate   = 4.0f; // how fast keys drive action toward ±1
+constexpr float kActionReturn = 6.0f; // decay toward 0 when key released
+constexpr float kZoomRate     = 4.0f; // world units/s
+constexpr float kMinCamDist   = 1.5f;
+constexpr float kMaxCamDist   = 30.0f;
 } // namespace
 
 BalanceNN::BalanceNN()
@@ -39,9 +38,14 @@ BalanceNN::init()
     if (!m_program.init())
         std::fprintf(stderr, "PhongProgram init failed\n");
 
-    m_plate  = new Plate(4.0f, 0.2f, 4.0f);
-    m_sphere = new Sphere(m_plate->width() * 0.05f); // 10% of width → radius
-    m_sphere->setPosition(0.0f, 0.0f);
+    BallPlateEnv::Config cfg;
+    cfg.plateWidth = 4.0f;
+    cfg.plateDepth = 4.0f;
+    m_env          = BallPlateEnv(cfg);
+    m_env.reset(/*seed*/ 42);
+
+    m_plate  = new Plate(cfg.plateWidth, 0.2f, cfg.plateDepth);
+    m_sphere = new Sphere(cfg.plateWidth * 0.05f);
 
     m_lastTicks = SDL_GetTicks();
 }
@@ -85,39 +89,35 @@ BalanceNN::update()
 
     SDL_GetWindowSize(m_window, &m_width, &m_height);
 
-    // W/S tilt about world X; A/D tilt about world Z.
+    // Build a target action from keys, then smooth it so tilt doesn't snap.
     const bool *keys = SDL_GetKeyboardState(nullptr);
-    float dTiltX     = 0.0f;
-    float dTiltZ     = 0.0f;
+    float dActX      = 0.0f;
+    float dActZ      = 0.0f;
     if (keys[SDL_SCANCODE_W])
-        dTiltX -= 1.0f;
+        dActX -= 1.0f;
     if (keys[SDL_SCANCODE_S])
-        dTiltX += 1.0f;
+        dActX += 1.0f;
     if (keys[SDL_SCANCODE_A])
-        dTiltZ -= 1.0f;
+        dActZ -= 1.0f;
     if (keys[SDL_SCANCODE_D])
-        dTiltZ += 1.0f;
+        dActZ += 1.0f;
 
-    m_tiltX += dTiltX * kTiltRate * dt;
-    m_tiltZ += dTiltZ * kTiltRate * dt;
-
-    auto decay = [dt](float a) {
-        float k = kTiltReturn * dt;
-        if (a > k)
-            return a - k;
-        if (a < -k)
-            return a + k;
-        return 0.0f;
+    auto approach = [dt](float cur, float target, float rate) {
+        float step = rate * dt;
+        if (cur < target - step)
+            return cur + step;
+        if (cur > target + step)
+            return cur - step;
+        return target;
     };
-    if (dTiltX == 0.0f)
-        m_tiltX = decay(m_tiltX);
-    if (dTiltZ == 0.0f)
-        m_tiltZ = decay(m_tiltZ);
+    m_actionX = dActX != 0.0f
+                    ? approach(m_actionX, dActX, kActionRate)
+                    : approach(m_actionX, 0.0f, kActionReturn);
+    m_actionZ = dActZ != 0.0f
+                    ? approach(m_actionZ, dActZ, kActionRate)
+                    : approach(m_actionZ, 0.0f, kActionReturn);
 
-    m_tiltX = std::clamp(m_tiltX, -kMaxTilt, kMaxTilt);
-    m_tiltZ = std::clamp(m_tiltZ, -kMaxTilt, kMaxTilt);
-
-    // Zoom: +/= zooms in (dolly toward origin), -/_ zooms out.
+    // Zoom.
     float dZoom = 0.0f;
     if (keys[SDL_SCANCODE_EQUALS] || keys[SDL_SCANCODE_KP_PLUS])
         dZoom -= 1.0f;
@@ -126,10 +126,22 @@ BalanceNN::update()
     m_camDist = std::clamp(m_camDist + dZoom * kZoomRate * dt, kMinCamDist,
                            kMaxCamDist);
 
-    m_plate->setTilt(m_tiltX, m_tiltZ);
-    m_sphere->update(dt, *m_plate);
-    if (m_sphere->hasFallen())
-        m_sphere->reset();
+    // Step the env at its fixed dt, catching up whatever the render frame took.
+    m_physicsAcc += dt;
+    float envDt = m_env.config().dt;
+    while (m_physicsAcc >= envDt)
+    {
+        if (m_env.done())
+            m_env.reset(SDL_GetTicks());
+        m_env.step(m_actionX, m_actionZ);
+        m_physicsAcc -= envDt;
+    }
+
+    // Push env state into the render objects.
+    const Observation &o = m_env.observe();
+    m_plate->setTilt(o.tiltX, o.tiltZ);
+    m_sphere->setPosition(o.px, o.pz);
+    m_sphere->setVelocity(o.vx, o.vz);
 }
 
 void
@@ -155,7 +167,6 @@ BalanceNN::render()
 
     m_plate->draw(m_program, sceneRot);
 
-    // Sphere rides the tilted plate: parent = sceneRot * plateTilt.
     Mat4 plateFrame = mul(sceneRot, m_plate->tiltMatrix());
     m_sphere->draw(m_program, plateFrame, m_plate->topY());
 

@@ -77,7 +77,9 @@ add_executable(${PROJECT_NAME}
     src/nn.cpp
     src/render_common.cpp
     src/plate.cpp
+    src/ball_physics.cpp
     src/sphere.cpp
+    src/env.cpp
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${TORCH_LIBRARIES} SDL3::SDL3 glad_gl_core_33)
 target_compile_options(${PROJECT_NAME} PRIVATE ${TORCH_CXX_FLAGS})
@@ -86,9 +88,14 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE include/pch.hpp)
 # --- Tests ---
 enable_testing()
 
-# Standalone physics smoke test — no GL, no SDL, no torch.
-add_executable(test_physics src/test_physics.cpp)
+# Standalone physics + env tests — no GL, no SDL, no torch.
+add_executable(test_physics src/test_physics.cpp src/ball_physics.cpp)
+target_include_directories(test_physics PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME physics COMMAND test_physics)
+
+add_executable(test_env src/test_env.cpp src/env.cpp src/ball_physics.cpp)
+target_include_directories(test_env PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME env COMMAND test_env)
 
 # add_executable(test_matrix src/test_matrix.cpp)
 # target_link_libraries(test_matrix PRIVATE ${TORCH_LIBRARIES})

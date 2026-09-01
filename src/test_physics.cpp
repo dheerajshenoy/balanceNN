@@ -6,66 +6,10 @@
 //   2) Same setup with damping ON vs damping OFF, so we can see that
 //      oscillations decay instead of running forever.
 //
-// This deliberately doesn't include sphere.hpp because that pulls in GL.
-// We prototype stepBallPhysics locally with the same formula; if you want
-// to link against the real one instead, drop the local copy and add
-// src/sphere.cpp — but sphere.cpp also drags in glad, so an isolated
-// header for the physics function is cleaner. Left as a follow-up.
+#include "ball_physics.hpp"
 
 #include <cmath>
 #include <cstdio>
-
-struct Vec2
-{
-    float x;
-    float y;
-};
-struct BallState
-{
-    Vec2 pos;
-    Vec2 vel;
-};
-
-// MUST stay in sync with stepBallPhysics in src/sphere.cpp.
-BallState
-stepBallPhysics(BallState s, float tiltX, float tiltZ, float dt,
-                float muK = 0.05f, float damping = 0.0f, float gravity = 9.81f)
-{
-    float ax = gravity * std::sin(tiltZ);
-    float ay = gravity * std::sin(tiltX);
-    s.vel.x += ax * dt;
-    s.vel.y += ay * dt;
-
-    float speed = std::sqrt(s.vel.x * s.vel.x + s.vel.y * s.vel.y);
-    if (speed > 0.0f)
-    {
-        float dv = muK * gravity * dt;
-        if (dv >= speed)
-        {
-            s.vel.x = 0.0f;
-            s.vel.y = 0.0f;
-        }
-        else
-        {
-            float k = (speed - dv) / speed;
-            s.vel.x *= k;
-            s.vel.y *= k;
-        }
-    }
-
-    if (damping > 0.0f)
-    {
-        float d = 1.0f - damping * dt;
-        if (d < 0.0f)
-            d = 0.0f;
-        s.vel.x *= d;
-        s.vel.y *= d;
-    }
-
-    s.pos.x += s.vel.x * dt;
-    s.pos.y += s.vel.y * dt;
-    return s;
-}
 
 int
 main()
