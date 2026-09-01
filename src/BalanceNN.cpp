@@ -14,7 +14,8 @@ constexpr float kMinCamDist   = 1.5f;
 constexpr float kMaxCamDist   = 30.0f;
 } // namespace
 
-BalanceNN::BalanceNN()
+BalanceNN::BalanceNN(std::string policy_path)
+    : m_policyPath(std::move(policy_path))
 {
     init();
 }
@@ -46,6 +47,28 @@ BalanceNN::init()
 
     m_plate  = new Plate(cfg.plateWidth, 0.2f, cfg.plateDepth);
     m_sphere = new Sphere(cfg.plateWidth * 0.05f);
+
+    if (!m_policyPath.empty())
+    {
+        Actor a(6, 2, /*hidden*/ 64, /*init_log_std*/ -0.5);
+        try
+        {
+            torch::load(a, m_policyPath + ".actor");
+            if (!m_norm.load(m_policyPath + ".norm"))
+                std::fprintf(stderr,
+                             "warning: could not load %s.norm; policy will "
+                             "run with un-normalized inputs\n",
+                             m_policyPath.c_str());
+            m_actor = a;
+            std::printf("loaded policy from %s.{actor,norm}\n",
+                        m_policyPath.c_str());
+        }
+        catch (const std::exception &e)
+        {
+            std::fprintf(stderr, "failed to load %s.actor: %s\n",
+                         m_policyPath.c_str(), e.what());
+        }
+    }
 
     m_lastTicks = SDL_GetTicks();
 }
@@ -133,17 +156,40 @@ BalanceNN::update()
     {
         if (m_env.done())
             m_env.reset(SDL_GetTicks());
-        float ax, az;
-        if (m_autopilot)
+        float ax = 0.0f, az = 0.0f;
+        switch (m_mode)
+        {
+        case Mode::Keyboard:
+            ax = m_actionX;
+            az = m_actionZ;
+            break;
+        case Mode::PD:
         {
             auto a = m_pd.compute(m_env.observe());
             ax     = a.x;
             az     = a.z;
+            break;
         }
-        else
-        {
-            ax = m_actionX;
-            az = m_actionZ;
+        case Mode::Neural:
+            if (m_actor)
+            {
+                // Pack obs, normalize, run actor deterministically (mean).
+                float raw[6];
+                const Observation &o = m_env.observe();
+                raw[0] = o.px;   raw[1] = o.pz;
+                raw[2] = o.vx;   raw[3] = o.vz;
+                raw[4] = o.tiltX; raw[5] = o.tiltZ;
+                m_norm.normalize(raw);
+                torch::NoGradGuard nograd;
+                auto obs_t = torch::from_blob(raw, {1, 6},
+                                              torch::TensorOptions().dtype(
+                                                  torch::kFloat32))
+                                 .clone();
+                auto a = m_actor->mean(obs_t);
+                ax = a[0][0].item<float>();
+                az = a[0][1].item<float>();
+            }
+            break;
         }
         m_env.step(ax, az);
         m_physicsAcc -= envDt;
@@ -211,9 +257,24 @@ BalanceNN::handleEvents(SDL_Event &event)
                 m_running = false;
             else if (event.key.key == SDLK_P)
             {
-                m_autopilot = !m_autopilot;
+                m_mode = (m_mode == Mode::PD) ? Mode::Keyboard : Mode::PD;
                 m_actionX = m_actionZ = 0.0f;
-                std::printf("autopilot: %s\n", m_autopilot ? "ON" : "OFF");
+                std::printf("mode: %s\n",
+                            m_mode == Mode::PD ? "PD" : "keyboard");
+            }
+            else if (event.key.key == SDLK_N)
+            {
+                if (!m_actor)
+                    std::printf("no policy loaded (pass --policy <path>)\n");
+                else
+                {
+                    m_mode = (m_mode == Mode::Neural) ? Mode::Keyboard
+                                                       : Mode::Neural;
+                    m_actionX = m_actionZ = 0.0f;
+                    std::printf("mode: %s\n", m_mode == Mode::Neural
+                                                  ? "neural"
+                                                  : "keyboard");
+                }
             }
             else if (event.key.key == SDLK_R)
                 m_env.reset(SDL_GetTicks());

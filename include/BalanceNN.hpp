@@ -9,18 +9,31 @@ extern "C"
 
 #include "env.hpp"
 #include "nn.hpp"
+#include "obs_normalizer.hpp"
 #include "pd_controller.hpp"
 #include "plate.hpp"
+#include "policy.hpp"
 #include "render_common.hpp"
 #include "sphere.hpp"
+
+#include <string>
 
 class BalanceNN
 {
 
 public:
-    BalanceNN();
+    // If policy_path is non-empty, we try to load <path>.actor and <path>.norm
+    // at startup. Missing files just disable Neural mode without failing.
+    explicit BalanceNN(std::string policy_path = "");
     ~BalanceNN();
     void run();
+
+    enum class Mode
+    {
+        Keyboard,
+        PD,
+        Neural
+    };
 
 private:
     void init();
@@ -44,7 +57,12 @@ private:
     BallPlateEnv m_env;
 
     PDController m_pd;
-    bool m_autopilot = false;
+
+    Mode m_mode          = Mode::Keyboard;
+    Actor m_actor        = nullptr; // null if no policy loaded
+    ObsNormalizer m_norm{6}; // populated iff actor loaded (obs dim = 6)
+
+    std::string m_policyPath;
 
     // Smoothed keyboard action (before clipping to [-1, 1]) so the tilt
     // doesn't snap on key press/release.

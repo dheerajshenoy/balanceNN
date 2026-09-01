@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
 // Online mean/variance tracker for observation normalization.
@@ -34,6 +35,11 @@ public:
     // Per-dim standard deviation (recomputed from M2 each call — call
     // sparingly).
     std::vector<double> stddev() const;
+
+    // Text-format save / load (small: dim + count + 2*dim doubles). Load
+    // returns false if the file is missing or the dim doesn't match.
+    bool save(const std::string &path) const;
+    bool load(const std::string &path);
 
 private:
     std::size_t m_dim;

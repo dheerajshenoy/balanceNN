@@ -280,9 +280,12 @@ main(int argc, char **argv)
             kEvalEpisodes, det_reward);
     }
 
-    // -------- Save weights.
+    // -------- Save weights + normalizer stats. The runtime visualizer
+    // needs the normalizer to feed the network inputs in the same units
+    // the trained policy expects.
     torch::save(actor, save_path + ".actor");
     torch::save(critic, save_path + ".critic");
-    std::printf("saved %s.{actor,critic}\n", save_path.c_str());
+    normalizer.save(save_path + ".norm");
+    std::printf("saved %s.{actor,critic,norm}\n", save_path.c_str());
     return 0;
 }
