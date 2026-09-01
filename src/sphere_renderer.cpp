@@ -280,28 +280,29 @@ SceneRenderer::buildPlate(Mesh &m, float w, float h, float d)
     float x = w * 0.5f, y = h * 0.5f, z = d * 0.5f;
 
     // 6 faces × 4 verts each, per-face normals (flat shaded box).
-    // Interleaved (pos, normal). Winding: CCW when viewed from outside.
+    // Interleaved (pos, normal). Winding: CCW when viewed from outside so
+    // the outward face survives GL_CULL_FACE with default CCW front-face.
     std::vector<float> verts = {
-        // +Y (top)
-        -x,  y, -z,   0,  1,  0,
-         x,  y, -z,   0,  1,  0,
-         x,  y,  z,   0,  1,  0,
+        // +Y (top) — CCW seen from +Y looking down
         -x,  y,  z,   0,  1,  0,
-        // -Y (bottom)
-        -x, -y,  z,   0, -1,  0,
-         x, -y,  z,   0, -1,  0,
-         x, -y, -z,   0, -1,  0,
+         x,  y,  z,   0,  1,  0,
+         x,  y, -z,   0,  1,  0,
+        -x,  y, -z,   0,  1,  0,
+        // -Y (bottom) — CCW seen from -Y looking up
         -x, -y, -z,   0, -1,  0,
-        // +X (right)
-         x, -y, -z,   1,  0,  0,
+         x, -y, -z,   0, -1,  0,
+         x, -y,  z,   0, -1,  0,
+        -x, -y,  z,   0, -1,  0,
+        // +X (right) — CCW seen from +X
          x, -y,  z,   1,  0,  0,
-         x,  y,  z,   1,  0,  0,
+         x, -y, -z,   1,  0,  0,
          x,  y, -z,   1,  0,  0,
-        // -X (left)
-        -x, -y,  z,  -1,  0,  0,
+         x,  y,  z,   1,  0,  0,
+        // -X (left) — CCW seen from -X
         -x, -y, -z,  -1,  0,  0,
-        -x,  y, -z,  -1,  0,  0,
+        -x, -y,  z,  -1,  0,  0,
         -x,  y,  z,  -1,  0,  0,
+        -x,  y, -z,  -1,  0,  0,
         // +Z (front)
         -x, -y,  z,   0,  0,  1,
          x, -y,  z,   0,  0,  1,

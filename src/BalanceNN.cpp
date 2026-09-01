@@ -1,8 +1,7 @@
 #include "BalanceNN.hpp"
 
-#include <glad/gl.h>
-
 #include <cstdio>
+#include <glad/gl.h>
 
 BalanceNN::BalanceNN()
 {
@@ -43,12 +42,12 @@ BalanceNN::initGUI()
 
     m_window = SDL_CreateWindow("BalanceNN", m_width, m_height,
                                 SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    m_glCtx = SDL_GL_CreateContext(m_window);
+    m_glCtx  = SDL_GL_CreateContext(m_window);
     SDL_GL_MakeCurrent(m_window, m_glCtx);
     SDL_GL_SetSwapInterval(1);
 
-    int version = gladLoadGL(reinterpret_cast<GLADloadfunc>(
-        SDL_GL_GetProcAddress));
+    int version
+        = gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress));
     if (version == 0)
         std::fprintf(stderr, "Failed to load OpenGL\n");
 
@@ -63,7 +62,7 @@ BalanceNN::update()
     Uint64 now  = SDL_GetTicks();
     float dt    = (now - m_lastTicks) / 1000.0f;
     m_lastTicks = now;
-    m_yaw += dt * 0.8f;
+    // m_yaw += dt * 0.8f;
 
     SDL_GetWindowSize(m_window, &m_width, &m_height);
 }
@@ -75,8 +74,8 @@ BalanceNN::render()
     glClearColor(0.06f, 0.07f, 0.09f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    float aspect = static_cast<float>(m_width) /
-                   static_cast<float>(m_height > 0 ? m_height : 1);
+    float aspect = static_cast<float>(m_width)
+                   / static_cast<float>(m_height > 0 ? m_height : 1);
     m_sphere.draw(aspect, m_yaw, m_pitch);
 
     SDL_GL_SwapWindow(m_window);
