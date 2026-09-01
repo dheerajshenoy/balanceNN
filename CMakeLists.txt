@@ -80,6 +80,11 @@ add_executable(${PROJECT_NAME}
     src/ball_physics.cpp
     src/sphere.cpp
     src/env.cpp
+    src/obs_normalizer.cpp
+    src/policy.cpp
+    src/rollout_buffer.cpp
+    src/training.cpp
+    src/ppo.cpp
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${TORCH_LIBRARIES} SDL3::SDL3 glad_gl_core_33)
 target_compile_options(${PROJECT_NAME} PRIVATE ${TORCH_CXX_FLAGS})
@@ -96,6 +101,42 @@ add_test(NAME physics COMMAND test_physics)
 add_executable(test_env src/test_env.cpp src/env.cpp src/ball_physics.cpp)
 target_include_directories(test_env PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME env COMMAND test_env)
+
+add_executable(test_normalizer src/test_normalizer.cpp src/obs_normalizer.cpp)
+target_include_directories(test_normalizer PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME normalizer COMMAND test_normalizer)
+
+add_executable(test_rollout src/test_rollout.cpp src/rollout_buffer.cpp)
+target_include_directories(test_rollout PRIVATE ${CMAKE_SOURCE_DIR}/include)
+add_test(NAME rollout COMMAND test_rollout)
+
+# PPO sanity test — needs libtorch.
+add_executable(test_ppo
+    src/test_ppo.cpp
+    src/rollout_buffer.cpp
+    src/training.cpp
+    src/policy.cpp
+    src/ppo.cpp
+)
+target_include_directories(test_ppo PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(test_ppo PRIVATE ${TORCH_LIBRARIES})
+target_compile_options(test_ppo PRIVATE ${TORCH_CXX_FLAGS})
+add_test(NAME ppo COMMAND test_ppo)
+
+# Training driver — NOT a ctest (takes minutes).
+add_executable(train_ppo
+    src/train_ppo.cpp
+    src/env.cpp
+    src/ball_physics.cpp
+    src/obs_normalizer.cpp
+    src/rollout_buffer.cpp
+    src/training.cpp
+    src/policy.cpp
+    src/ppo.cpp
+)
+target_include_directories(train_ppo PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(train_ppo PRIVATE ${TORCH_LIBRARIES})
+target_compile_options(train_ppo PRIVATE ${TORCH_CXX_FLAGS})
 
 # add_executable(test_matrix src/test_matrix.cpp)
 # target_link_libraries(test_matrix PRIVATE ${TORCH_LIBRARIES})
